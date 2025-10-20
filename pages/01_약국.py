@@ -2,75 +2,59 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# -----------------------
-# 데이터 불러오기
-# -----------------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("pharmacy_data.csv")  # 약국 데이터
-    return df
+# -----------------------------
+# ⚠️ 가공된 예시 데이터 (실제 통계 아님)
+# -----------------------------
+data = {
+    "region": ["서울"] * 5 + ["안동"] * 5,
+    "district": ["강남구", "마포구", "송파구", "강서구", "종로구", "안동시 북구", "안동시 서구", "안동시 동구", "안동시 남구", "안동시 중구"],
+    "revenue": [5200, 4300, 4800, 3900, 3700, 2800, 2600, 2400, 2000, 2200],
+    "rent": [1300, 1100, 1200, 900, 800, 700, 600, 500, 450, 480],
+}
 
-df = load_data()
+df = pd.DataFrame(data)
+df["ratio"] = (df["revenue"] / df["rent"]).round(2)
 
-# -----------------------
-# UI 구성
-# -----------------------
-st.title("💊 지역별 약국 임대료 대비 매출 분석")
-st.markdown("서울과 안동 지역의 구별 **약국 임대료 대비 매출 비율**을 시각화합니다.")
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.set_page_config(page_title="약국 임대료 대비 매출 대시보드", layout="wide")
+st.title("💊 약국 임대료 대비 매출 분석")
+st.caption("※ 본 데이터는 가공된 예시이며 실제 통계가 아닙니다.")
 
 # 지역 선택
-city = st.selectbox("📍 지역을 선택하세요", ["서울", "안동"])
+region = st.selectbox("📍 지역을 선택하세요", df["region"].unique())
 
-# -----------------------
-# 데이터 전처리
-# -----------------------
-df_city = df[df["도시"] == city].copy()
+# 선택된 지역의 데이터 필터링
+filtered = df[df["region"] == region].sort_values("ratio", ascending=False)
 
-# 임대료 0 또는 결측 제거
-df_city = df_city[df_city["임대료"] > 0].dropna(subset=["매출", "임대료", "구"])
+# 색상 설정: 1등은 빨간색, 나머지는 그라데이션
+colors = ["#FF4B4B"] + [f"rgba(255,100,100,{0.9 - i*0.15})" for i in range(1, len(filtered))]
 
-# 구별 평균 계산
-summary = (
-    df_city.groupby("구")[["매출", "임대료"]]
-    .mean()
-    .assign(매출임대비=lambda x: x["매출"] / x["임대료"])
-    .reset_index()
-)
-
-# 정렬 (내림차순)
-summary = summary.sort_values("매출임대비", ascending=False)
-
-# 색상 설정: 1등 빨강 + 나머지 그라데이션
-colors = ["#ff0000"] + px.colors.sequential.Reds[len(summary) - 1 : 0 : -1]
-
-# -----------------------
-# Plotly 그래프
-# -----------------------
+# 그래프 생성
 fig = px.bar(
-    summary,
-    x="구",
-    y="매출임대비",
-    title=f"{city} 지역 약국 임대료 대비 매출 비율",
-    color="매출임대비",
-    color_continuous_scale="Reds",
+    filtered,
+    x="district",
+    y="ratio",
+    text="ratio",
+    title=f"{region} 약국 임대료 대비 매출 비율",
 )
 
-# 1등만 빨간색 강조
-fig.update_traces(marker=dict(line=dict(color="black", width=0.5)))
+# 막대 색상 적용
+for i, bar_color in enumerate(colors):
+    fig.data[i].marker.color = bar_color
+
+fig.update_traces(textposition="outside")
 fig.update_layout(
-    xaxis_title="구",
-    yaxis_title="매출 ÷ 임대료 비율",
-    coloraxis_showscale=False,
+    yaxis_title="임대료 대비 매출 비율",
+    xaxis_title="구/지역",
     template="plotly_white",
+    showlegend=False,
 )
 
-# -----------------------
-# 출력
-# -----------------------
+# 그래프 출력
 st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------
-# 데이터 표시
-# -----------------------
-st.subheader("📊 구별 요약 데이터")
-st.dataframe(summary.style.format({"매출": "{:,.0f}", "임대료": "{:,.0f}", "매출임대비": "{:.2f}"}))
+# 데이터 테이블 표시
+with st.expander("📊 데이터 보기"):
+    st.dataframe(filtered, use_container_width=True)
